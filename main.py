@@ -10,6 +10,9 @@ app = Flask(__name__)
 # --- LINEの鍵を設定（Renderの環境変数から読み込む） ---
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
 LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET')
+# デバッグ用：鍵が読み込めていない場合にエラーログを出す
+if LINE_CHANNEL_ACCESS_TOKEN is None or LINE_CHANNEL_SECRET is None:
+    print("CRITICAL ERROR: LINEの環境変数が読み込めていません！Renderの設定を確認してください。")
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
