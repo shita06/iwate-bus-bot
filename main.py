@@ -1,4 +1,18 @@
+import os
 import datetime
+from flask import Flask, request, abort
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
+app = Flask(__name__)
+
+# --- LINEの鍵を設定（Renderの環境変数から読み込む） ---
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get('LINE_CHANNEL_ACCESS_TOKEN')
+LINE_CHANNEL_SECRET = os.environ.get('LINE_CHANNEL_SECRET')
+
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 # バスの時刻表データ（改行して見やすく整理）
 bus_data = {
@@ -59,37 +73,52 @@ bus_data = {
 }
 
 def get_combined_info():
-    # --- 現在時刻の取得（JST） ---
     t_delta = datetime.timedelta(hours=9)
     JST = datetime.timezone(t_delta, 'JST')
     now_dt = datetime.datetime.now(JST)
-
-    # --- 現在時刻と曜日の取得 ---
-    now_dt = datetime.datetime.now()
     now_time = now_dt.strftime("%H:%M")
     is_weekend = now_dt.weekday() >= 5
     day_key = "weekend" if is_weekend else "weekday"
     
     all_found_buses = []
-
     for route_name, schedules in bus_data.items():
-        times = schedules[day_key]
-        for t in times:
+        for t in schedules[day_key]:
             if t > now_time:
                 all_found_buses.append({"time": t, "route": route_name})
 
     all_found_buses.sort(key=lambda x: x["time"])
 
-    # --- 返却用テキストの組み立て ---
     day_label = "休日" if is_weekend else "平日"
-    header = f"--- 高松の池口案内 ({day_label}) ---\n現在時刻: {now_time}\n" + "-"*20 + "\n"
+    res = f"--- 高松の池口案内 ({day_label}) ---\n現在時刻: {now_time}\n" + "-"*20 + "\n"
     
     if all_found_buses:
-        rows = [f"{bus['time']} | {bus['route']}" for bus in all_found_buses[:5]]
-        return header + "\n".join(rows)
+        for bus in all_found_buses[:5]:
+            res += f"{bus['time']} | {bus['route']}\n"
     else:
-        return header + "本日の運行はすべて終了しました。"
+        res += "本日の運行はすべて終了しました。"
+    return res
+
+# --- LINEからの通知を受け取る窓口 ---
+@app.route("/callback", methods=['POST'])
+def callback():
+    signature = request.headers['X-Line-Signature']
+    body = request.get_data(as_text=True)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
+
+# --- 何かメッセージが届いたら実行する処理 ---
+@handler.add(MessageEvent, message=TextMessage)
+def handle_message(event):
+    # バス情報を取得して返信する
+    bus_info = get_combined_info()
+    line_bot_api.reply_message(
+        event.reply_token,
+        TextSendMessage(text=bus_info)
+    )
 
 if __name__ == "__main__":
-    # 自分のPCで実行した際も結果が表示されるようにする
-    print(get_combined_info())
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
