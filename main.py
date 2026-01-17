@@ -92,7 +92,7 @@ def get_combined_info():
     all_found_buses.sort(key=lambda x: x["time"])
 
     day_label = "休日" if is_weekend else "平日"
-    res = f"--- 高松の池口案内 ({day_label}) ---\n現在時刻: {now_time}\n" + "-"*20 + "\n"
+    res = f"--- 高松の池口案内 ({day_label}) ---\n現在時刻: {now_time}\n" + "-"*40 + "\n"
     
     if all_found_buses:
         for bus in all_found_buses[:5]:
